@@ -23,7 +23,7 @@ BASE_PATH = os.path.abspath(os.path.dirname(__file__))
 _FONT_BOLD_PATH = BASE_PATH + '/fonts/SourceHanSansOLD-Bold-2.otf'
 _FONT_PATH = BASE_PATH + "/fonts/SourceHanSansSC-Regular-2.otf"
 
-WEEKS = [u'星期一', u'星期二', u'星期三', u'星期四', u'星期五', u'星期六', u'星期日']
+WEEKS = [u'星期日', u'星期一', u'星期二', u'星期三', u'星期四', u'星期五', u'星期六']
 _TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
