@@ -62,6 +62,24 @@
           })
         }
 
+        function getExcludedWatermarkFields() {
+          return [$('#t_submit_list')[0].value, $('#loc_list')[0].value].filter(Boolean);
+        }
+
+        function filterWatermarkFields(fields) {
+          const excludedFields = getExcludedWatermarkFields();
+          return (fields || []).filter((fieldId) => !excludedFields.includes(fieldId));
+        }
+
+        function syncWatermarkFieldSelection() {
+          const excludedFields = getExcludedWatermarkFields();
+          $('#watermark_field_list option').prop('disabled', false).each(function() {
+            if (excludedFields.includes(this.value)) {
+              $(this).prop('disabled', true);
+            }
+          });
+          $('#watermark_field_list').val(filterWatermarkFields($('#watermark_field_list').val() || []));
+        }
         $(async () => {
 
           let tableMetaList = await bitable.base.getTableMetaList();
@@ -78,6 +96,8 @@
 
           refreshFieldLists(fieldMetaList);
 
+          syncWatermarkFieldSelection();
+
           $(".loading_page").css("display","none");
 
           $("#table_list").change(async function() {
@@ -92,7 +112,13 @@
 
             refreshFieldLists(fieldMetaList);
 
+            syncWatermarkFieldSelection();
+
             $(".loading_page").css("display","none");
+          })
+
+          $("#t_submit_list, #loc_list").change(function() {
+            syncWatermarkFieldSelection();
           })
 
           $(".btn_save").click(async function() {
@@ -141,7 +167,8 @@
           let target_field = $('#target_attach_list')[0].value;
           let t_submit_field = $('#t_submit_list')[0].value;
           let location_field = $('#loc_list')[0].value;
-          let watermark_fields = $('#watermark_field_list').val() || [];
+          let watermark_fields = filterWatermarkFields($('#watermark_field_list').val() || []);
+          $('#watermark_field_list').val(watermark_fields);
 
           const base_token = $("#base_token")[0].value;
           if(base_token === '') {

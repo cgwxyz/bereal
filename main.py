@@ -45,6 +45,10 @@ def watermark():
   watermark_fields = params.get('watermark_fields', [])
   if isinstance(watermark_fields, str):
     watermark_fields = [watermark_fields] if watermark_fields else []
+  excluded_watermark_fields = [field for field in [t_submit_field, location_field] if field]
+  watermark_fields = [
+      field for field in watermark_fields if field not in excluded_watermark_fields
+  ]
   try:
     gen_watermark(personal_token, app_token, table_id, record_id,
                   t_submit_field, source_field, target_field, location_field,
