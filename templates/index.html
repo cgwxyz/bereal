@@ -31,6 +31,37 @@
           return newArray;
         }
 
+        function appendOption($select, item) {
+          $("<option>")
+            .attr("label", item.name)
+            .attr("data-name", item.name)
+            .val(item.id)
+            .text(item.name)
+            .appendTo($select);
+        }
+
+        function refreshFieldLists(fieldMetaList) {
+          $("#source_attach_list").html("");
+          $("#target_attach_list").html("");
+          $("#t_submit_list").html("");
+          $("#loc_list").html('<option label="不选择" data-name="" value="">不选择</option>');
+          $("#watermark_field_list").html("");
+
+          fieldMetaList.forEach((item) => {
+            if(item.type === 17) {
+              appendOption($("#source_attach_list"), item);
+              appendOption($("#target_attach_list"), item);
+            } else {
+              appendOption($("#watermark_field_list"), item);
+              if(item.type === 5 || item.type === 1001) {
+                appendOption($("#t_submit_list"), item);
+              } else if(item.type === 22) {
+                appendOption($("#loc_list"), item);
+              }
+            }
+          })
+        }
+
         $(async () => {
 
           let tableMetaList = await bitable.base.getTableMetaList();
@@ -45,21 +76,7 @@
           const table = await bitable.base.getTableById(tableId);
           let fieldMetaList = await table.getFieldMetaList();
 
-          $("#source_attach_list").html("");
-          $("#target_attach_list").html("");
-          $("#t_submit_list").html("");
-          $("#loc_list").html("");
-
-          fieldMetaList.forEach((item) => {
-              if(item.type === 17) {
-                $("#source_attach_list").append('<option label="'+item.name+'" data-name="'+item.name+'" value="'+item.id+'"></option>');
-                $("#target_attach_list").append('<option label="'+item.name+'" data-name="'+item.name+'" value="'+item.id+'"></option>');
-              }else if(item.type === 5 || item.type === 1001) {
-                $("#t_submit_list").append('<option label="'+item.name+'" data-name="'+item.name+'" value="'+item.id+'"></option>');
-              }else if(item.type === 22) {
-                $("#loc_list").append('<option label="'+item.name+'" data-name="'+item.name+'" value="'+item.id+'"></option>');
-              }
-          })
+          refreshFieldLists(fieldMetaList);
 
           $(".loading_page").css("display","none");
 
@@ -73,21 +90,7 @@
 
             let fieldMetaList = await table.getFieldMetaList();
 
-            $("#source_attach_list").html("");
-            $("#target_attach_list").html("");
-            $("#t_submit_list").html("");
-            $("#loc_list").html("");
-
-            fieldMetaList.forEach((item) => {
-                if(item.type === 17) {
-                  $("#source_attach_list").append('<option label="'+item.name+'" data-name="'+item.name+'" value="'+item.id+'"></option>');
-                  $("#target_attach_list").append('<option label="'+item.name+'" data-name="'+item.name+'" value="'+item.id+'"></option>');
-                }else if(item.type === 5 || item.type === 1001) {
-                  $("#t_submit_list").append('<option label="'+item.name+'" data-name="'+item.name+'" value="'+item.id+'"></option>');
-                }else if(item.type === 22) {
-                  $("#loc_list").append('<option label="'+item.name+'" data-name="'+item.name+'" value="'+item.id+'"></option>');
-                }
-            })
+            refreshFieldLists(fieldMetaList);
 
             $(".loading_page").css("display","none");
           })
@@ -102,6 +105,16 @@
 
             let source_field = $('#source_attach_list')[0].value;
             let target_field = $('#target_attach_list')[0].value;
+            if (!source_field){
+              $('#source_attach_list').focus();
+              alert("请选择需加水印附件字段");
+              return
+            }
+            if (!target_field){
+              $('#target_attach_list').focus();
+              alert("请选择最终存储附件字段");
+              return
+            }
             if (source_field == target_field){
               $('#source_attach_list').focus();
               alert("为保证数据安全，请不要将最终存储附件与源附件设置为同一字段")
@@ -128,6 +141,7 @@
           let target_field = $('#target_attach_list')[0].value;
           let t_submit_field = $('#t_submit_list')[0].value;
           let location_field = $('#loc_list')[0].value;
+          let watermark_fields = $('#watermark_field_list').val() || [];
 
           const base_token = $("#base_token")[0].value;
           if(base_token === '') {
@@ -142,7 +156,8 @@
   "source_field":"` + source_field + `",
   "target_field":"` + target_field + `",
   "t_submit_field":"` + t_submit_field + `",
-  "location_field":"` + location_field + `"
+  "location_field":"` + location_field + `",
+  "watermark_fields":` + JSON.stringify(watermark_fields) + `
 }\n\n`
           console.log("get html_str", html_str)
           $(".parameter").html(html_str);
@@ -178,6 +193,12 @@
         <span id="view_title">地理位置字段（该信息附加到水印，非必填）</span>
         <div class="main_form">
           <select name="loc_list" class="view_list" id="loc_list">
+          </select>
+        </div>
+
+        <span id="view_title">水印展示字段（可多选，按住 Ctrl 或 Shift 选择多个）</span>
+        <div class="main_form">
+          <select name="watermark_field_list" class="view_list multi_field_list" id="watermark_field_list" multiple>
           </select>
         </div>
 

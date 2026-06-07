@@ -15,6 +15,11 @@ def manual():
   return render_template('manual.html')
 
 
+@app.route('/healthcheck')
+def healthcheck():
+  return '', 200
+
+
 @app.route('/watermark', methods=['POST'])
 def watermark():
   params = request.get_json()
@@ -36,9 +41,13 @@ def watermark():
   if not target_field:
     return jsonify({'sta': -1, "msg": "no target field assigned"})
   location_field = params.get('location_field', '')
+  watermark_fields = params.get('watermark_fields', [])
+  if isinstance(watermark_fields, str):
+    watermark_fields = [watermark_fields] if watermark_fields else []
   try:
     gen_watermark(personal_token, app_token, table_id, record_id,
-                  t_submit_field, source_field, target_field, location_field)
+                  t_submit_field, source_field, target_field, location_field,
+                  watermark_fields)
   except Exception as e:
     print('get excep:%s,%s' % (e, traceback.format_exc()))
   return jsonify({'sta': 1, "msg": "ok"})

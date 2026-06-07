@@ -63,6 +63,11 @@ svg {
   }
 }
 
+.multi_field_list {
+  height: 96px;
+  padding-top: 4px;
+}
+
 .tip {
   color: #ff0000;
   font-size: 12px;

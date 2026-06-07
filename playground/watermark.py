@@ -7,7 +7,7 @@ import json
 from io import BytesIO
 import logging
 
-from PIL import Image, ImageDraw, ImageFont, ImageFile
+from PIL import Image, ImageDraw, ImageFont, ImageFile, ImageOps
 import pytz
 
 from baseopensdk import BaseClient
@@ -49,6 +49,42 @@ def stamp2time(stamp, _format=_TIME_FORMAT):
   return time.strftime(_format, time_tuple)
 
 
+def _format_field_value(value, field_type=None):
+  if value is None:
+    return ''
+  if isinstance(value, bool):
+    return u'是' if value else u'否'
+  if isinstance(value, (int, float)):
+    if field_type in [5, 23, 1001]:
+      return stamp2time(int(value / 1000))
+    return str(value)
+  if isinstance(value, str):
+    return value
+  if isinstance(value, list):
+    values = [_format_field_value(item, field_type) for item in value]
+    return u'、'.join([item for item in values if item])
+  if isinstance(value, dict):
+    for key in [
+        'full_address', 'text', 'name', 'en_name', 'full_name', 'title',
+        'link', 'url', 'phone_number'
+    ]:
+      if value.get(key):
+        return str(value.get(key))
+    if value.get('location'):
+      return str(value.get('location'))
+    simple_values = [
+        str(item) for item in value.values()
+        if isinstance(item, (str, int, float)) and str(item)
+    ]
+    return u'、'.join(simple_values)
+  return str(value)
+
+
+def _truncate_field_value(value, max_length=300):
+  value = value or ''
+  return value if len(value) <= max_length else value[:max_length] + '...'
+
+
 def add_color_bar(height, width=6, color=(24, 144, 255)):
   tmp_img = Image.new("RGBA", (width, height), color)
   return tmp_img
@@ -80,10 +116,25 @@ def download_attach(client, table_id, record_id, field_id, file_token):
 
 def jpeg2png(source_img):
   source_im = Image.open(source_img)
+  source_im = ImageOps.exif_transpose(source_im)
   if source_im.mode != 'RGBA':
     tmp_im = source_im.convert("RGBA")
     return tmp_im
   return source_im
+
+
+def _scale_by_image(width, height, base=1080):
+  short_side = max(1, min(width, height))
+  return short_side / base
+
+
+def _scaled(value, scale, min_value=None, max_value=None):
+  result = int(round(value * scale))
+  if min_value is not None:
+    result = max(min_value, result)
+  if max_value is not None:
+    result = min(max_value, result)
+  return result
 
 
 def add_text(content,
@@ -178,7 +229,8 @@ def add_text(content,
 
 
 def gen_watermark(personal_token, app_token, table_id, record_id,
-                  t_submit_field, source_field, target_field, location_field):
+                  t_submit_field, source_field, target_field, location_field,
+                  watermark_fields=None):
   # 构建client
   client: BaseClient = BaseClient.builder() \
       .app_token(app_token) \
@@ -199,8 +251,10 @@ def gen_watermark(personal_token, app_token, table_id, record_id,
 
   fields = getattr(list_field_response.data, 'items', [])
   field_map = {}
+  field_type_map = {}
   for field in fields:
     field_map.update({field.field_id: field.field_name})
+    field_type_map.update({field.field_id: getattr(field, 'type', None)})
 
   # 获取指定记录
   get_record_req = GetAppTableRecordRequest.builder().table_id(
@@ -228,6 +282,15 @@ def gen_watermark(personal_token, app_token, table_id, record_id,
     attach_body = download_attach(client, table_id, record_id, source_field,
                                   attach.get('file_token', ''))
     params = []
+    for field_id in watermark_fields or []:
+      field_name = field_map.get(field_id)
+      if not field_name:
+        continue
+      field_value = _truncate_field_value(
+          _format_field_value(fields.get(field_name), field_type_map.get(field_id)))
+      if field_value:
+        params.append({'field_name': field_name, 'field_value': field_value})
+
     if location.get('full_address', ''):
       params.append({
           'field_key': 10,
@@ -294,65 +357,68 @@ def add_team_watermark_v1(source_img_data, curr_time, curr_date, curr_week_day,
                           params):
   im1 = jpeg2png(BytesIO(source_img_data))
   width1, height1 = im1.size
+  scale = _scale_by_image(width1, height1)
   max_width = width1
   # 获取布局
   layout_setting = {
       'left': 20,
       "params_gap": {
-          'left': 40,
-          'right': 20
+          'left': _scaled(40, scale, 16, 40),
+          'right': _scaled(20, scale, 10, 20)
       },
       'show_area': {
-          'size': 32,
+          'size': _scaled(32, scale, 18, 32),
           'backgroundcolor': (38, 38, 38, 0),
           'fixed_width': 0,
-          'paddingleft': 0
+          'paddingleft': 0,
+          'linegap': _scaled(5, scale, 3, 5)
       },
       'time': {
-          'size': 100,
+          'size': _scaled(100, scale, 44, 100),
           'left': 0,
-          'top': 23,
+          'top': _scaled(23, scale, 10, 23),
           'color': "white"
       },
       'date': {
-          'size': 32,
-          'left': 30,
-          'top': 25,
+          'size': _scaled(32, scale, 18, 32),
+          'left': _scaled(30, scale, 12, 30),
+          'top': _scaled(25, scale, 10, 25),
           'color': "white"
       },
       'week': {
-          'size': 32,
-          'left': 30,
-          'top': 75,
+          'size': _scaled(32, scale, 18, 32),
+          'left': _scaled(30, scale, 12, 30),
+          'top': _scaled(75, scale, 32, 75),
           'color': "white"
       },
       'poweredby': {
-          'size': 30,
-          'left': 30,
-          'top': 75,
+          'size': _scaled(30, scale, 16, 30),
+          'left': _scaled(30, scale, 12, 30),
+          'top': _scaled(75, scale, 32, 75),
           'color': "white"
       },
-      'normal_size': 32,
+      'normal_size': _scaled(32, scale, 18, 32),
       'split_bar': {
           'visible': 1,
           'color': (255, 204, 0, 255),
-          'width': 4,
+          'width': _scaled(4, scale, 2, 4),
           'paddingtop': 0,
-          'paddingleft': 10
+          'paddingleft': _scaled(10, scale, 4, 10)
       },
       'address_gap': {
-          'left': 40,
-          'top': 160
+          'left': _scaled(40, scale, 16, 40),
+          'top': _scaled(160, scale, 64, 160)
       },
       'date_gap': {
-          'left': 40,
-          'top': 250
+          'left': _scaled(40, scale, 16, 40),
+          'top': _scaled(250, scale, 100, 250)
       },
       'max_char': 18,
   }
 
   gap = layout_setting.get('params_gap', {}).get('left', 10)
-  top_checkin_h = 120
+  bottom_padding = _scaled(20, scale, 8, 20)
+  top_checkin_h = _scaled(120, scale, 56, 120)
   # 创建新图层 2倍LOGO
   layer = Image.new("RGBA", im1.size, (255, 255, 255, 0))
 
@@ -395,7 +461,7 @@ def add_team_watermark_v1(source_img_data, curr_time, curr_date, curr_week_day,
 
       layer.paste(text_img,
                   (text_left_gap + 10 if exist_dot else text_left_gap,
-                   int(height1 - params_height - 20)))  # left top
+                   int(height1 - params_height - bottom_padding)))  # left top
 
   # 添加打卡时间点
   fnt = ImageFont.truetype(_FONT_BOLD_PATH,
@@ -410,7 +476,7 @@ def add_team_watermark_v1(source_img_data, curr_time, curr_date, curr_week_day,
                                                backgroundcolor=(38, 38, 38, 0))
   layer.paste(text_img,
               (int(gap + layout_setting.get('time', {}).get('left', 0)),
-               int(height1 - params_height - top_checkin_h - 40 +
+               int(height1 - params_height - top_checkin_h - _scaled(40, scale, 16, 40) +
                    layout_setting.get('time', {}).get('top', 0))))
 
   # 添加分隔条
@@ -419,7 +485,7 @@ def add_team_watermark_v1(source_img_data, curr_time, curr_date, curr_week_day,
                       color=layout_setting.get('split_bar', {}).get('color'))
   layer.paste(bar, (gap + time_width +
                     layout_setting.get('split_bar', {}).get('paddingleft', 0),
-                    int(height1 - params_height - top_checkin_h - 30 +
+                    int(height1 - params_height - top_checkin_h - _scaled(30, scale, 12, 30) +
                         layout_setting.get('time', {}).get('top', 0))))
 
   # 添加日期 和星期
@@ -436,7 +502,7 @@ def add_team_watermark_v1(source_img_data, curr_time, curr_date, curr_week_day,
   layer.paste(
       text_img,
       (int(gap + time_width + layout_setting.get('date', {}).get('left', 0)),
-       int(height1 - params_height - top_checkin_h - 40 +
+       int(height1 - params_height - top_checkin_h - _scaled(40, scale, 16, 40) +
            layout_setting.get('date', {}).get('top', 0))))
 
   # 添加星期
@@ -453,7 +519,7 @@ def add_team_watermark_v1(source_img_data, curr_time, curr_date, curr_week_day,
   layer.paste(
       text_img,
       (int(gap + time_width + layout_setting.get('date', {}).get('left', 0)),
-       int(height1 - params_height - top_checkin_h - 40 +
+       int(height1 - params_height - top_checkin_h - _scaled(40, scale, 16, 40) +
            layout_setting.get('week', {}).get('top', 0))))
   # add powerdby
   fnt = ImageFont.truetype(_FONT_PATH,
@@ -468,7 +534,7 @@ def add_team_watermark_v1(source_img_data, curr_time, curr_date, curr_week_day,
                                                backgroundcolor=(38, 38, 38, 0),
                                                height=40)
   layer.paste(text_img,
-              (int(width1 - text_width - 20), int(height1 - text_height - 20)))
+              (int(width1 - text_width - bottom_padding), int(height1 - text_height - bottom_padding)))
 
   out = Image.composite(layer, im1, layer)
   out = out.convert('RGB')
